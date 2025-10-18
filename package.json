@@ -1,0 +1,13 @@
+{
+  "name": "vercel-presign-api",
+  "version": "1.0.0",
+  "main": "api/presign-upload.js",
+  "scripts": {
+    "start": "node ./dev-server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.500.0",
+    "@aws-sdk/s3-request-presigner": "^3.500.0",
+    "mime-types": "^2.1.35"
+  }
+}
