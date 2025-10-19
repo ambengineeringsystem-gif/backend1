@@ -1,0 +1,10 @@
+{
+  "TENDER": [
+    {"id":"c_1","title":"Sample Tender Job","created":1600000000000}
+  ],
+  "BRIEF": [],
+  "SUPPLLIER": [],
+  "START": [],
+  "PROCURE": [],
+  "FABRICATION": []
+}

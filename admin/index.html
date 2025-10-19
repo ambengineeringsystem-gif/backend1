@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin - Kanban Management</title>
+  <link rel="stylesheet" href="../style.css" />
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:20px;background:#f6f8fb}
+    .panel{max-width:880px;margin:20px auto;background:#fff;padding:16px;border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+    header{display:flex;align-items:center;justify-content:space-between}
+    .controls{display:flex;gap:12px}
+    button{padding:8px 12px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer}
+    button.primary{background:#2b7cff;color:#fff;border:0}
+    .hint{color:#556;font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <header>
+      <h1>Kanban Admin</h1>
+      <div class="controls">
+        <div id="adminStatus" class="hint">Not authenticated</div>
+        <button id="openLogin">Admin Sign in</button>
+        <button id="openUsers" disabled>Manage Users</button>
+        <button id="openCats" disabled>Manage Categories</button>
+      </div>
+    </header>
+    <p class="hint">This page loads the same management modules used by the main app and exposes them as a simple admin console. Use the admin credentials to sign in and enable management actions.</p>
+    <div id="log" style="margin-top:12px;font-family:monospace;white-space:pre-wrap;color:#234;max-height:300px;overflow:auto;padding:8px;border-radius:6px;background:#f2f6fb"></div>
+  </div>
+
+  <!-- inline login modal used by admin page to authenticate -->
+  <div id="adminLoginModal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:8px;padding:16px;max-width:360px;margin:40px auto;box-shadow:0 8px 30px rgba(0,0,0,0.2);">
+      <h3 style="margin-top:0">Admin Sign in</h3>
+      <!-- hidden dummy fields to discourage browser autofill -->
+      <input type="text" name="fakeusernameremembered" id="fakeusernameremembered" style="display:none" autocomplete="username" />
+      <input type="password" name="fakepasswordremembered" id="fakepasswordremembered" style="display:none" autocomplete="new-password" />
+      <form id="adminLoginForm" autocomplete="off" style="margin:0">
+        <!-- use unpredictable name attributes to discourage autofill heuristics -->
+        <input id="adminLoginUser" name="u_" placeholder="username" autocomplete="off" style="width:100%;padding:8px;margin-bottom:8px" />
+        <input id="adminLoginPass" name="p_" placeholder="password" type="password" autocomplete="new-password" style="width:100%;padding:8px;margin-bottom:8px" />
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" id="adminLoginCancel">Cancel</button>
+          <button type="submit" id="adminLoginSubmit" class="primary">Sign in</button>
+        </div>
+      </form>
+      <div id="adminLoginError" style="color:#900;margin-top:8px;display:none"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    // admin console bootstrapping
+    const statusEl = document.getElementById('adminStatus');
+    const openUsers = document.getElementById('openUsers');
+    const openCats = document.getElementById('openCats');
+    const openLogin = document.getElementById('openLogin');
+    const logEl = document.getElementById('log');
+    const modal = document.getElementById('adminLoginModal');
+    const userIn = document.getElementById('adminLoginUser');
+    const passIn = document.getElementById('adminLoginPass');
+  const cancelBtn = document.getElementById('adminLoginCancel');
+  const submitBtn = document.getElementById('adminLoginSubmit');
+  const loginForm = document.getElementById('adminLoginForm');
+    const errEl = document.getElementById('adminLoginError');
+    let authedUser = null;
+
+    function log(msg){ logEl.textContent = (new Date()).toLocaleTimeString() + ' - ' + msg + '\n' + logEl.textContent; }
+
+    // lazy-load users and categories modules; they will register window._USERS and dispatch events
+    
+    async function tryImportWithFallback(paths){
+      for(const p of paths){
+        try{
+          await import(p);
+          log('Imported module ' + p);
+          return p;
+        }catch(err){
+          log('Failed to import ' + p + ': ' + (err && err.message ? err.message : String(err)));
+        }
+      }
+      throw new Error('All import attempts failed: ' + paths.join(', '));
+    }
+
+    async function ensureModules(){
+      // attempt to load users and categories modules from several sensible locations
+      // so the admin page works whether you serve from the repo root or from the admin folder.
+      if(!window._USERS){
+        try{
+          // try server-root absolute path first, then parent-relative, then local
+          await tryImportWithFallback(['/users.js','../users.js','./users.js']);
+        }catch(e){
+          console.warn('Users module import failed', e);
+        }
+      }
+      if(!window._CATS_LOADED){
+        try{
+          // categories.js doesn't set a global flag, so mark it loaded after successful import
+          await tryImportWithFallback(['/categories.js','../categories.js','./categories.js']);
+          // set a small flag so callers know categories are available
+          try{ window._CATS_LOADED = true; }catch(e){}
+        }catch(e){
+          console.warn('Categories module import failed', e);
+        }
+      }
+    }
+
+    openLogin.addEventListener('click', async ()=>{
+      await ensureModules();
+      // clear and protect inputs to avoid browser autofill showing prefilled values
+      try{
+        // clear values
+        userIn.value = '';
+        passIn.value = '';
+        errEl.style.display = 'none';
+        // make fields readonly briefly, then remove readonly when focused to avoid some autofill heuristics
+        userIn.readOnly = true; passIn.readOnly = true;
+        const enableOnFocus = (ev) => { ev.target.readOnly = false; ev.target.removeEventListener('focus', enableOnFocus); };
+        userIn.addEventListener('focus', enableOnFocus); passIn.addEventListener('focus', enableOnFocus);
+        // give inputs random name attributes to further reduce autofill matching
+        userIn.name = 'u_' + Math.random().toString(36).slice(2,8);
+        passIn.name = 'p_' + Math.random().toString(36).slice(2,8);
+      }catch(e){/* ignore */}
+      modal.style.display = 'flex';
+    });
+    cancelBtn.addEventListener('click', ()=>{ modal.style.display = 'none'; });
+    // handle form submit so browser autofill doesn't trigger navigation
+    if(loginForm){
+      loginForm.addEventListener('submit', async (ev)=>{
+        ev.preventDefault();
+        const u = userIn.value && userIn.value.trim();
+        const p = passIn.value && passIn.value.trim();
+        if(!u || !p){ errEl.textContent='Enter username and password'; errEl.style.display='block'; return; }
+        try{
+          if(!window._USERS || !window._USERS.login){ errEl.textContent='Users module not available'; errEl.style.display='block'; return; }
+          const ok = await window._USERS.login(u,p);
+          if(ok){
+            authedUser = u;
+            statusEl.textContent = 'Authenticated as ' + u;
+            openUsers.disabled = false; openCats.disabled = false; modal.style.display = 'none';
+            log('Authenticated as ' + u);
+            // dispatch admin-auth-success so users.js will open manager when needed
+            const evt = new CustomEvent('admin-auth-success', { detail: { username: u } });
+            window.dispatchEvent(evt);
+          } else {
+            errEl.textContent = 'Invalid admin credentials'; errEl.style.display='block';
+          }
+        }catch(err){ errEl.textContent = 'Auth failed: ' + (err && err.message ? err.message : String(err)); errEl.style.display='block'; }
+      });
+    }
+
+    openUsers.addEventListener('click', async ()=>{
+      await ensureModules();
+      // fire users-manage event which the users.js module listens for
+      
+      window.dispatchEvent(new CustomEvent('users-manage'));
+      log('Opened Manage Users');
+    });
+    openCats.addEventListener('click', async ()=>{
+      await ensureModules();
+      window.dispatchEvent(new CustomEvent('categories-manage'));
+      log('Opened Manage Categories');
+    });
+
+    // also reflect external events in the log/status
+    window.addEventListener('users-updated', (e)=>{
+      log('Users updated (' + Object.keys((e.detail && e.detail.users) || {}).length + ')');
+    });
+    window.addEventListener('categories-updated', (e)=>{
+      log('Categories updated (' + (e.detail && e.detail.categories ? e.detail.categories.length : 0) + ')');
+    });
+
+    // mark categories module loaded when imported (categories.js doesn't set a flag)
+    // intercept import to set a flag
+    try{ // no-op
+    }catch(e){}
+  </script>
+</body>
+</html>

@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Job Board - Kanban</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="left-controls">
+      <button id="createTaskBtn" aria-label="Create task">CREATE TASK <strong>+</strong></button>
+      <h1>Job Board</h1>
+      <div id="currentUserDisplay" style="margin-left:12px;font-size:13px;color:#555">Not signed in</div>
+    </div>
+    <div class="controls">
+      <!-- Job creation is only available via the CREATE TASK button on the left -->
+      
+      <!-- Clear All removed; actions moved into hamburger menu -->
+      <div style="position:relative;display:inline-block;margin-left:12px;">
+        <button id="hamburgerBtn" aria-label="Menu" style="padding:6px 8px;border-radius:6px;">☰</button>
+        <div id="hamburgerMenu" style="position:absolute;right:0;top:32px;background:#fff;border:1px solid #ddd;padding:8px;border-radius:6px;display:none;min-width:160px;box-shadow:0 6px 18px rgba(0,0,0,0.08);">
+          <div style="margin-top:6px;"><button id="menuAdmin">ADMIN</button></div>
+          <div style="margin-top:6px;"><button id="menuLogin">Login</button></div>
+          <div style="margin-top:6px;"><button id="menuLogout">Logout</button></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="board" class="board">
+    <!-- Columns will be injected by JS -->
+  </main>
+
+  <template id="cardTemplate">
+    <div class="card" draggable="true">
+      <div class="card-title" contenteditable="true"></div>
+      <div class="card-actions">
+        <button class="delete">✕</button>
+      </div>
+    </div>
+  </template>
+
+  <div id="status" style="position:fixed;right:12px;bottom:12px;padding:6px 10px;background:#222;color:#fff;border-radius:6px;font-size:12px;opacity:0.9">Offline</div>
+  <!-- Create Task modal (hidden) -->
+  <div id="createModal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:8px;padding:16px;max-width:520px;margin:40px auto;box-shadow:0 8px 30px rgba(0,0,0,0.2);">
+      <h2 style="margin-top:0">Create Job</h2>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <input id="createTitle" placeholder="Title" style="padding:8px;border:1px solid #ddd;border-radius:6px" />
+        <textarea id="createDesc" placeholder="Description (optional)" rows="4" style="padding:8px;border:1px solid #ddd;border-radius:6px"></textarea>
+        <div style="display:flex;gap:8px">
+          <input id="createAssignee" placeholder="Assignee" style="flex:1;padding:8px;border:1px solid #ddd;border-radius:6px" />
+          <input id="createDue" type="date" style="padding:8px;border:1px solid #ddd;border-radius:6px" />
+        </div>
+        <select id="createCategory" style="padding:8px;border:1px solid #ddd;border-radius:6px"></select>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px">
+          <button id="createCancel">Cancel</button>
+          <button id="createSave" style="background:#2b7cff;color:#fff;border:0;padding:8px 12px;border-radius:6px">Create</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Job details modal -->
+  <div id="detailsModal" class="modal" style="display:none">
+    <div class="modal-panel details-panel">
+      <div class="details-header">
+        <h2 id="detailTitle">Job Details</h2>
+        <button id="detailClose" class="modal-close-button" aria-label="Close">✕</button>
+      </div>
+
+      <div class="details-meta">
+        <div class="meta-left">
+          <div class="meta-item"><strong>Category</strong><div id="detailCategory" class="badge"></div></div>
+          <div class="meta-item"><strong>Assignee</strong><div id="detailAssignee" class="muted"></div></div>
+        </div>
+        <div class="meta-right">
+          <div class="meta-item"><strong>Due</strong><div id="detailDue" class="muted"></div></div>
+          <div class="meta-item"><strong>Created by</strong><div id="detailCreatedBy" class="muted"></div></div>
+        </div>
+      </div>
+
+      <div id="detailDesc" class="details-desc"></div>
+
+      <div class="attachments" style="margin-top:12px">
+        <h4 style="margin:6px 0">Attachments</h4>
+        <div id="attachmentsList" style="margin-bottom:8px;color:#333">No attachments</div>
+        <input type="file" id="attachmentInput" accept="application/pdf" style="display:none" />
+        <button id="attachBtn" style="background:#2b7cff;color:#fff;border:0;padding:6px 10px;border-radius:6px">Attach PDF</button>
+        <div id="attachmentStatus" style="font-size:12px;color:#444;margin-top:6px"></div>
+      </div>
+
+      <div class="details-footer">
+        <div class="created-info">Created: <span id="detailCreated"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="categories.js"></script>
+  <script type="module" src="users.js"></script>
+  <!-- Admin auth modal (secure access to Manage Users) -->
+  <div id="adminAuthModal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:8px;padding:16px;max-width:360px;margin:40px auto;box-shadow:0 8px 30px rgba(0,0,0,0.2);">
+      <h3 style="margin-top:0">Admin authentication</h3>
+      <p style="margin:0 0 8px 0;color:#444;font-size:13px">Enter admin username and password to manage users.</p>
+      <input id="adminAuthUser" placeholder="username" style="width:100%;padding:8px;margin-bottom:8px" />
+      <input id="adminAuthPass" placeholder="password" type="password" style="width:100%;padding:8px;margin-bottom:8px" />
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button id="adminAuthCancel">Cancel</button>
+        <button id="adminAuthSubmit" style="background:#2b7cff;color:#fff;border:0;padding:8px 12px;border-radius:6px">Authenticate</button>
+      </div>
+      <div id="adminAuthError" style="color:#900;margin-top:8px;display:none"></div>
+    </div>
+  </div>
+  <!-- Login modal -->
+  <div id="loginModal" style="display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,0.45);align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:8px;padding:16px;max-width:360px;margin:40px auto;box-shadow:0 8px 30px rgba(0,0,0,0.2);">
+      <h3 style="margin-top:0">Sign in</h3>
+      <input id="loginUser" placeholder="username" style="width:100%;padding:8px;margin-bottom:8px" />
+      <input id="loginPass" placeholder="password" type="password" style="width:100%;padding:8px;margin-bottom:8px" />
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button id="loginCancel">Cancel</button>
+        <button id="loginSubmit" style="background:#2b7cff;color:#fff;border:0;padding:8px 12px;border-radius:6px">Sign in</button>
+      </div>
+      <div id="loginError" style="color:#900;margin-top:8px;display:none"></div>
+    </div>
+  </div>
+  <script type="module" src="app.js"></script>
+  <script>
+    // Show ADMIN button only for the unremovable admin account and wire click to open admin console
+    (function(){
+      const btn = document.getElementById('menuAdmin');
+      if(!btn) return;
+      try{
+        const raw = localStorage.getItem('kanban_current_user');
+        const cu = raw ? JSON.parse(raw) : null;
+        if(!(cu && cu.username === 'admin')){
+          btn.style.display = 'none';
+          return;
+        }
+      }catch(e){ btn.style.display = 'none'; return; }
+      btn.addEventListener('click', function(){
+        try{ window.open('admin/index.html', '_blank'); }catch(e){ window.location.href = 'admin/index.html'; }
+        // close hamburger menu if present
+        const hm = document.getElementById('hamburgerMenu'); if(hm) hm.style.display = 'none';
+      });
+    })();
+  </script>
+</body>
+</html>
